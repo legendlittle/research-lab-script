@@ -1,0 +1,213 @@
+---
+title: "Final Script"
+author: "David Wong"
+date: "September 26, 2017"
+output: html_document
+---
+
+First, we get the data (need a for loop to get these files, though the for loop will be all wrapped up)
+Next, we analyze the data and remove highly flourescent wells
+Rewrite the data file while keeping certain columns but having removed these highly fluorescent wells
+Make sure it's the right format to put into CDD; name it library_CDD
+Goes through CDD, comes out ready for analysis
+Need a for loop to read through all of the libraries in one folder, output an analysis concatenated in one file
+
+Also, the CDD_input file will be one per library(rbind all of the individual ones)
+Next step is looking at outliers in separate file (with library, well number)
+
+##################################MAIN FUNCTION##########################
+#If we had the list of all libraries, the for loop would look like this: THIS WORKS
+```{r}
+
+all_fluor_read('C:/Users/Davey Wong/Desktop/ARv7 200K Library Plates', execlib, execnames, 'C:/Users/Davey Wong/Desktop/Output Files')
+
+all_fluor_read <- function(directory,libraryshh, libnames, directory_out) {
+  
+  for (i in 1:length(libraryshh))
+  {
+    remfile <- data.frame()
+    remlist <- list()
+    for(j in 1:length(unlist(libraryshh[i])))
+    {
+     filed <- read_me_in(directory, libraryshh[[i]][j]) #jth element of ith library
+     
+     if(sum(which(as.numeric(unlist(filed[6])) == 0)) > 0)
+     {
+       filed <- filed[-c(which(as.numeric(unlist(filed[6])) == 0)),] #Remove 0s
+     }
+     remifiled <- removefluor(filed, zfluor(filed), 5) #Remove the fluorescent stuff
+     remlist <- rep(libraryshh[[i]][j], nrow(remifiled))
+     
+     remfiled <- as.data.frame(cbind(as.vector(unlist(remlist)), remifiled)) #Make a data frame with first column being the name of the library-jth element
+     remfile <- rbind(remfile, remfiled)
+     
+    }
+    setwd(directory_out)
+    names(remfile)[1] <- 'Plate Name' 
+    outfile <- paste(paste(libnames[i], 'CDD', sep = '_'), 'csv', sep = '.')
+    write.table(remfile, row.names = FALSE, file = outfile, sep = ',')
+  }
+}
+##Ok this works (should work if we had all of the files for every)
+
+```
+###This function allows user interaction to remove files
+```{r}
+#Let's have a set list for the library list and the library names
+#This is the FULL LIST
+execlib <- list(DL,EAM,ES,LC,LCI,LOPAC,LS,MS,NIHII,NPW,SS,TAR,UCLA)
+execnames <- c('DL','EAM','ES','LC','LCI', 'LOPAC','LS', 'MS', 'NIHII', 'NPW', 'SS', 'TAR', 'UCLA')
+#If I don't have any specific files, I can remove them here
+execlib <- missingfiles(execlib, execnames)
+
+
+missingfiles <- function(lib, names)
+{
+  misslib = "Not Done"
+  missnum = "Not Done"
+  
+  while(misslib != "Done")
+  {
+  misslib <- readline(prompt = "From which library would you like to remove a file (LC, LS, UCLAII, LCI, EAM, DL, TAR, SS, MS, ES, NPW, LOPAC, NIHII)? Type 'Done' if you are finished removing files. ")
+  if(misslib == "Done")
+    break;
+  if(length(which(names == misslib)) == 0)
+  {
+    misslib <- readline(prompt = "From which library would you like to remove a file (LC, LS, UCLAII, LCI, EAM, DL, TAR, SS, MS, ES, NPW, LOPAC, NIHII)? Type 'Done' if you are finished removing files. ")
+  }
+  cat("You have picked library:", misslib)
+  missnum <- readline(prompt = "Which file do you want to remove? Type 'Done' if you are finished removing files. ")
+  if(missnum == "Done")
+    break;
+  
+  if(as.numeric(missnum) > length(unlist(lib[[which(names==misslib)]])))
+  {
+    missnum <- readline(prompt = "Which file do you want to remove? Type 'Done' if you are finished removing files. ")
+  }
+  
+  cat("Removing:", paste(misslib, missnum, sep = '-'))
+  lib[[which(names==misslib)]] <- lib[[which(names==misslib)]][-which(lib[[which(names==misslib)]] == paste(misslib, missnum, sep = '-'))]
+  }
+  return(lib)
+}
+
+```
+
+
+
+
+
+###Make a function to read in the files from one folder
+```{r}
+# "C:/Users/Davey Wong/Desktop"
+read_me_in <- function (directory, library_index) {#directory is folder location of all the files
+  file_in <- read.delim(paste(paste(directory, library_index, sep = '/'), 'txt', sep = '.'), header = FALSE, stringsAsFactors = FALSE)
+  zframe <- data.frame(file_in[6:389,])
+  mynameiswhat <- file_in [5,]
+  names(zframe) <-  mynameiswhat
+  return(zframe)
+}
+#abc <- read_me_in("C:/Users/Davey Wong/Desktop/ARv7 200K Library Plates", 'NPW-1')
+#head(abc)
+#names(abc)[25]
+
+
+
+#head(removefluor(abc, zfluor(abc), 5))
+#execlib
+#execnames
+```
+
+
+
+
+
+###Make a function to compute z-scores of fluorescent levels compared to columns 2 and 23 Good to go
+```{r}
+
+zfluor <- function(x){#x here is the read-in file
+  z_list <- list()
+  aver_intens <- mean(as.numeric(unlist(x[26]))[c(17:32, 353:368)])
+  sd_intens <- sd(as.numeric(unlist(x[26]))[c(17:32, 353:368)])
+  for(i in 1:length(as.numeric(unlist(x[26])))){
+    z_list[i] <- (as.numeric(unlist(x[26]))[i] - aver_intens)/sd_intens 
+  }
+  return(as.vector(z_list))
+}
+
+
+
+```
+
+
+
+
+
+###Function that removes fluorescent wells (higher than threshold (maybe just higher and not below z-score)) Good to go
+#Also want to remove wells with 0 in it (check each column if it is 0)
+```{r}
+removefluor <- function(file, x, crit) {#x here will be a zfluor output
+  remdata <- unlist(x)
+  if(sum(x > 5, na.rm = TRUE) == 0 )
+  {
+    return (file[,c(which(names(file)=="Well Name") ,4,26,27,32,33)])
+  }
+  else 
+  {
+    remdat <- file[-(which(remdata > crit)),  c(which(names(file)=="Well Name"),4,26,27,32,33)]
+    names(remdat) <- names(file)[c(which(names(file) == "Well Name"),4,26,27,32,33)]
+  
+  }
+  return(remdat)
+}
+#names(abc)
+#which(as.numeric(unlist(removefluor(abc, zfluor(abc), 5)[6])) == 0)
+#abcrm <- removefluor(abc, zfluor(abc), 5)
+
+
+#sum(which(as.numeric(unlist(abcrm[6])) == 0)) > 0
+#abcrm
+#head(removefluor(read_me_in('C:/Users/Davey Wong/Desktop/ARv7 200K Library Plates', 'NPW-1'), zfluor(read_me_in('C:/Users/Davey Wong/Desktop/ARv7 200K Library Plates', 'NPW-4'))))
+
+#names(read_me_in('C:/Users/jklee/Desktop/ARv7 200K Library Plates', 'NPW-1'))
+```
+#Making the library of library names (May have to remove some of the names if the files for them don't exist)
+```{r}
+write_lib <- function(x, plate, number)
+{
+  for(i in 1:number)
+  {
+    x[i] <- paste(plate, i, sep = '-')
+  }
+  return(x)
+}
+
+
+LC <- list()
+LC <- unlist(write_lib(LC, 'LC', 158))
+LS<- list()
+LS <- unlist(write_lib(LS, 'LS', 125))
+UCLA <- list()
+UCLA <- unlist(write_lib(UCLA, 'UCLA',94))
+LCI <- list()
+LCI <- unlist(write_lib(LCI, 'LCI', 73))
+EAM <- list()
+EAM <- unlist(write_lib(EAM, 'EAM', 63))
+DL <- list()
+DL <- unlist(write_lib(DL, 'DL', 62))
+TAR <- list()
+TAR <- unlist(write_lib(TAR, 'TAR', 27))
+SS <- list()
+SS <- unlist(write_lib(SS, 'SS', 8))
+MS <- list()
+MS <- unlist(write_lib(MS, 'MS', 7))
+ES <- list()
+ES <- unlist(write_lib(ES, 'ES', 6))
+NPW <- list()
+NPW <- unlist(write_lib(NPW, 'NPW', 4))
+LOPAC <- list()
+LOPAC <- unlist(write_lib(LOPAC, 'LOPAC', 4))
+NIHII <- list()
+NIHII <- unlist(write_lib(NIHII, 'NIHII', 3))
+```
+
