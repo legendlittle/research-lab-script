@@ -109,7 +109,7 @@ execnames <- c('DL','EAM','ES','LC','LCI', 'LOPAC','LS', 'MS', 'NIHII', 'NPW', '
 
 
 FINALLY,
-##################################Function that wraps everything up together######################################
+#Function that wraps everything up together
 #Function written to loop through a folder with all the test files and output the files into a separate folder
 ```{r}
 
