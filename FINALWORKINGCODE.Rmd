@@ -4,22 +4,116 @@ author: "David Wong"
 date: "September 26, 2017"
 output: html_document
 ---
+Author's note: These functions can be generalized to work with other data sets and file types, but since the format of the files was guaranteed to be systematically organized and would thus be the same for each file, I was able to write functions that did not require regular expressions (this would generalize the function to be able to parse through multiple data types with varying column names and number) but instead had specific column indexes (as seen in lines 26, 27, 38-41, 54, 58, 59, 128, 130). 
 
-First, we get the data (need a for loop to get these files, though the for loop will be all wrapped up)
-Next, we analyze the data and remove highly flourescent wells
-Rewrite the data file while keeping certain columns but having removed these highly fluorescent wells
-Make sure it's the right format to put into CDD; name it library_CDD
-Goes through CDD, comes out ready for analysis
-Need a for loop to read through all of the libraries in one folder, output an analysis concatenated in one file
+This is a list of steps for the task at hand and where it is accomplished in the script below:
+First, read in the data (need a for loop to get these files, though the for loop will be all wrapped up) (read_me_in function)
 
-Also, the CDD_input file will be one per library(rbind all of the individual ones)
-Next step is looking at outliers in separate file (with library, well number)
+Next, analyze the data and remove highly flourescent wells (zfluor function)
 
-##################################MAIN FUNCTION##########################
-#If we had the list of all libraries, the for loop would look like this: THIS WORKS
+Next, Reorganize the data file while keeping certain columns but having removed these highly fluorescent wells (removefluor function)
+
+Make sure it's the right format to put into CDD; name it library_CDD (all_fluor_read function lines 137,138)
+Also, the CDD_input file will be one per library(rbind all of the individual ones) (all_fluor_read function lines 129,130)
+
+
+
+###Make a function to read in the files from one folder
+```{r}
+# "C:/Users/Davey Wong/Desktop"
+read_me_in <- function (directory, library_index) {#directory is folder location of all the files
+  file_in <- read.delim(paste(paste(directory, library_index, sep = '/'), 'txt', sep = '.'), header = FALSE, stringsAsFactors = FALSE)
+  zframe <- data.frame(file_in[6:389,])
+  mynameiswhat <- file_in [5,]
+  names(zframe) <-  mynameiswhat
+  return(zframe)
+}
+```
+
+
+###Make a function to compute z-scores of fluorescent levels compared to columns 2 and 23 
+```{r}
+zfluor <- function(x){#x here is the read-in file
+  z_list <- list()
+  aver_intens <- mean(as.numeric(unlist(x[26]))[c(17:32, 353:368)])
+  sd_intens <- sd(as.numeric(unlist(x[26]))[c(17:32, 353:368)])
+  for(i in 1:length(as.numeric(unlist(x[26])))){
+    z_list[i] <- (as.numeric(unlist(x[26]))[i] - aver_intens)/sd_intens 
+  }
+  return(as.vector(z_list))
+}
+```
+
+###Function that removes fluorescent wells (higher than threshold (maybe just higher and not below z-score)) Good to go
+#Also want to remove wells with 0 in it (check each column if it is 0)
+```{r}
+removefluor <- function(file, x, crit) {#x here will be a zfluor output
+  remdata <- unlist(x)
+  if(sum(x > 5, na.rm = TRUE) == 0 )
+  {
+    return (file[,c(which(names(file)=="Well Name") ,4,26,27,32,33)])
+  }
+  else 
+  {
+    remdat <- file[-(which(remdata > crit)),  c(which(names(file)=="Well Name"),4,26,27,32,33)]
+    names(remdat) <- names(file)[c(which(names(file) == "Well Name"),4,26,27,32,33)]
+  
+  }
+  return(remdat)
+}
+```
+
+#Making the library of library names (May have to remove some of the names if the files for them don't exist)
+```{r}
+write_lib <- function(x, plate, number)
+{
+  for(i in 1:number)
+  {
+    x[i] <- paste(plate, i, sep = '-')
+  }
+  return(x)
+}
+LC <- list()
+LC <- unlist(write_lib(LC, 'LC', 158))
+LS<- list()
+LS <- unlist(write_lib(LS, 'LS', 125))
+UCLA <- list()
+UCLA <- unlist(write_lib(UCLA, 'UCLA',94))
+LCI <- list()
+LCI <- unlist(write_lib(LCI, 'LCI', 73))
+EAM <- list()
+EAM <- unlist(write_lib(EAM, 'EAM', 63))
+DL <- list()
+DL <- unlist(write_lib(DL, 'DL', 62))
+TAR <- list()
+TAR <- unlist(write_lib(TAR, 'TAR', 27))
+SS <- list()
+SS <- unlist(write_lib(SS, 'SS', 8))
+MS <- list()
+MS <- unlist(write_lib(MS, 'MS', 7))
+ES <- list()
+ES <- unlist(write_lib(ES, 'ES', 6))
+NPW <- list()
+NPW <- unlist(write_lib(NPW, 'NPW', 4))
+LOPAC <- list()
+LOPAC <- unlist(write_lib(LOPAC, 'LOPAC', 4))
+NIHII <- list()
+NIHII <- unlist(write_lib(NIHII, 'NIHII', 3))
+```
+#Let's have a set list for the library list and the library names
+#This is the FULL LIST
+```{r}
+execlib <- list(DL,EAM,ES,LC,LCI,LOPAC,LS,MS,NIHII,NPW,SS,TAR,UCLA)
+execnames <- c('DL','EAM','ES','LC','LCI', 'LOPAC','LS', 'MS', 'NIHII', 'NPW', 'SS', 'TAR', 'UCLA')
+```
+
+
+FINALLY,
+##################################Function that wraps everything up together######################################
+#Function written to loop through a folder with all the test files and output the files into a separate folder
 ```{r}
 
-all_fluor_read('C:/Users/Davey Wong/Desktop/ARv7 200K Library Plates', execlib, execnames, 'C:/Users/Davey Wong/Desktop/Output Files')
+#Example of using the function: all_fluor_read('C:/Users/blmlol/test-files-stored-here', execlib, execnames, 'C:/Users/Davey Wong/Desktop/Output Files')
 
 all_fluor_read <- function(directory,libraryshh, libnames, directory_out) {
   
@@ -48,15 +142,11 @@ all_fluor_read <- function(directory,libraryshh, libnames, directory_out) {
     write.table(remfile, row.names = FALSE, file = outfile, sep = ',')
   }
 }
-##Ok this works (should work if we had all of the files for every)
 
 ```
+#Miscellaneous function
 ###This function allows user interaction to remove files
 ```{r}
-#Let's have a set list for the library list and the library names
-#This is the FULL LIST
-execlib <- list(DL,EAM,ES,LC,LCI,LOPAC,LS,MS,NIHII,NPW,SS,TAR,UCLA)
-execnames <- c('DL','EAM','ES','LC','LCI', 'LOPAC','LS', 'MS', 'NIHII', 'NPW', 'SS', 'TAR', 'UCLA')
 #If I don't have any specific files, I can remove them here
 execlib <- missingfiles(execlib, execnames)
 
@@ -91,123 +181,5 @@ missingfiles <- function(lib, names)
   return(lib)
 }
 
-```
-
-
-
-
-
-###Make a function to read in the files from one folder
-```{r}
-# "C:/Users/Davey Wong/Desktop"
-read_me_in <- function (directory, library_index) {#directory is folder location of all the files
-  file_in <- read.delim(paste(paste(directory, library_index, sep = '/'), 'txt', sep = '.'), header = FALSE, stringsAsFactors = FALSE)
-  zframe <- data.frame(file_in[6:389,])
-  mynameiswhat <- file_in [5,]
-  names(zframe) <-  mynameiswhat
-  return(zframe)
-}
-#abc <- read_me_in("C:/Users/Davey Wong/Desktop/ARv7 200K Library Plates", 'NPW-1')
-#head(abc)
-#names(abc)[25]
-
-
-
-#head(removefluor(abc, zfluor(abc), 5))
-#execlib
-#execnames
-```
-
-
-
-
-
-###Make a function to compute z-scores of fluorescent levels compared to columns 2 and 23 Good to go
-```{r}
-
-zfluor <- function(x){#x here is the read-in file
-  z_list <- list()
-  aver_intens <- mean(as.numeric(unlist(x[26]))[c(17:32, 353:368)])
-  sd_intens <- sd(as.numeric(unlist(x[26]))[c(17:32, 353:368)])
-  for(i in 1:length(as.numeric(unlist(x[26])))){
-    z_list[i] <- (as.numeric(unlist(x[26]))[i] - aver_intens)/sd_intens 
-  }
-  return(as.vector(z_list))
-}
-
-
-
-```
-
-
-
-
-
-###Function that removes fluorescent wells (higher than threshold (maybe just higher and not below z-score)) Good to go
-#Also want to remove wells with 0 in it (check each column if it is 0)
-```{r}
-removefluor <- function(file, x, crit) {#x here will be a zfluor output
-  remdata <- unlist(x)
-  if(sum(x > 5, na.rm = TRUE) == 0 )
-  {
-    return (file[,c(which(names(file)=="Well Name") ,4,26,27,32,33)])
-  }
-  else 
-  {
-    remdat <- file[-(which(remdata > crit)),  c(which(names(file)=="Well Name"),4,26,27,32,33)]
-    names(remdat) <- names(file)[c(which(names(file) == "Well Name"),4,26,27,32,33)]
-  
-  }
-  return(remdat)
-}
-#names(abc)
-#which(as.numeric(unlist(removefluor(abc, zfluor(abc), 5)[6])) == 0)
-#abcrm <- removefluor(abc, zfluor(abc), 5)
-
-
-#sum(which(as.numeric(unlist(abcrm[6])) == 0)) > 0
-#abcrm
-#head(removefluor(read_me_in('C:/Users/Davey Wong/Desktop/ARv7 200K Library Plates', 'NPW-1'), zfluor(read_me_in('C:/Users/Davey Wong/Desktop/ARv7 200K Library Plates', 'NPW-4'))))
-
-#names(read_me_in('C:/Users/jklee/Desktop/ARv7 200K Library Plates', 'NPW-1'))
-```
-#Making the library of library names (May have to remove some of the names if the files for them don't exist)
-```{r}
-write_lib <- function(x, plate, number)
-{
-  for(i in 1:number)
-  {
-    x[i] <- paste(plate, i, sep = '-')
-  }
-  return(x)
-}
-
-
-LC <- list()
-LC <- unlist(write_lib(LC, 'LC', 158))
-LS<- list()
-LS <- unlist(write_lib(LS, 'LS', 125))
-UCLA <- list()
-UCLA <- unlist(write_lib(UCLA, 'UCLA',94))
-LCI <- list()
-LCI <- unlist(write_lib(LCI, 'LCI', 73))
-EAM <- list()
-EAM <- unlist(write_lib(EAM, 'EAM', 63))
-DL <- list()
-DL <- unlist(write_lib(DL, 'DL', 62))
-TAR <- list()
-TAR <- unlist(write_lib(TAR, 'TAR', 27))
-SS <- list()
-SS <- unlist(write_lib(SS, 'SS', 8))
-MS <- list()
-MS <- unlist(write_lib(MS, 'MS', 7))
-ES <- list()
-ES <- unlist(write_lib(ES, 'ES', 6))
-NPW <- list()
-NPW <- unlist(write_lib(NPW, 'NPW', 4))
-LOPAC <- list()
-LOPAC <- unlist(write_lib(LOPAC, 'LOPAC', 4))
-NIHII <- list()
-NIHII <- unlist(write_lib(NIHII, 'NIHII', 3))
 ```
 
